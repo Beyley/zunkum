@@ -1,0 +1,10 @@
+.{
+    .name = "zunkum",
+    .version = "0.0.0",
+    .dependencies = .{
+        .network = .{
+            .url = "https://github.com/MasterQ32/zig-network/archive/830821a8736ca1bf7662b9c5fec9bfe9f0066ad3.tar.gz",
+            .hash = "1220206c698a1890d742a8b98acb16db99275d16f2e7fe2046c3d8f2249ed267ca71",
+        },
+    },
+}
