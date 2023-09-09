@@ -116,12 +116,6 @@ pub fn Server(comptime init_args: anytype) type {
 
             var response_context = ResponseContext{ .headers = std.StringHashMap([]const u8).init(request_context.allocator) };
 
-            const middlewaresTypeInfo = @typeInfo(@TypeOf(init_args.middlewares)).Struct;
-
-            inline for (middlewaresTypeInfo.fields) |field| {
-                try @field(init_args.middlewares, field.name).handle(request_context, &response_context);
-            }
-
             const path_hash = std.hash_map.hashString(path);
 
             const endpointGroupsType = @TypeOf(init_args.endpoint_groups);
@@ -172,6 +166,12 @@ pub fn Server(comptime init_args: anytype) type {
                             }
 
                             @compileError("No services handle param of type " ++ @typeName(args_field.type) ++ " on endpoint " ++ endpoint_path ++ "!");
+                        }
+
+                        const middlewaresTypeInfo = @typeInfo(@TypeOf(init_args.middlewares)).Struct;
+
+                        inline for (middlewaresTypeInfo.fields) |middleware_field| {
+                            try @field(init_args.middlewares, middleware_field.name).handle(request_context, &response_context);
                         }
 
                         var ret = @call(.auto, endpoint_value.fun, args) catch |err| {
