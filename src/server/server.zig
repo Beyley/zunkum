@@ -56,7 +56,12 @@ pub fn Server(comptime init_args: anytype) type {
                 var reader = buffered_reader.reader();
                 var writer = buffered_writer.writer();
 
-                var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+                //reasonable upper bound...
+                //TODO: add option to figure this in `args`
+                var backing_header_buf: [32768]u8 = undefined;
+                var backing_allocator = std.heap.FixedBufferAllocator.init(&backing_header_buf);
+
+                var arena = std.heap.ArenaAllocator.init(backing_allocator.allocator());
                 defer arena.deinit();
 
                 const allocator = arena.allocator();
@@ -112,8 +117,6 @@ pub fn Server(comptime init_args: anytype) type {
         }
 
         pub fn processRequest(self: *Self, path: []const u8, reader: Reader, writer: Writer, method: std.http.Method, request_context: *RequestContext) !void {
-            _ = reader;
-
             var response_context = ResponseContext{ .headers = std.StringHashMap([]const u8).init(request_context.allocator) };
 
             const path_hash = std.hash_map.hashString(path);
@@ -151,6 +154,9 @@ pub fn Server(comptime init_args: anytype) type {
                                 continue;
                             } else if (args_field.type == *ResponseContext) {
                                 @field(args, args_field.name) = response_context;
+                                continue;
+                            } else if (args_field.type == Reader) {
+                                @field(args, args_field.name) = reader;
                                 continue;
                             }
 
