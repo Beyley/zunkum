@@ -15,6 +15,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     exe.linkLibC();
+    exe.addModule("network", network);
     exe.addModule("zunkum", zunkum);
 
     b.installArtifact(exe);

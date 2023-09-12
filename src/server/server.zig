@@ -9,6 +9,7 @@ pub const RequestContext = struct {
     version: std.http.Version,
     path: []const u8,
     method: std.http.Method,
+    socket: network.Socket,
 };
 
 pub const ResponseContext = struct {
@@ -18,10 +19,26 @@ pub const ResponseContext = struct {
 
 pub fn ServerMiddleware(comptime name: []const u8) type {
     return struct {
-        pub fn handle(request_context: *RequestContext, response_context: *ResponseContext) !void {
+        pub fn handle(request_context: *RequestContext, response_context: *ResponseContext) !?std.http.Status {
             _ = request_context;
 
             try response_context.headers.put("Server", name);
+
+            return null;
+        }
+    };
+}
+
+pub const ContentTypeHtmlMiddleware = ContentTypeMiddleware("text/html; charset=UTF-8");
+
+pub fn ContentTypeMiddleware(comptime content_type: []const u8) type {
+    return struct {
+        pub fn handle(request_context: *RequestContext, response_context: *ResponseContext) !?std.http.Status {
+            _ = request_context;
+
+            try response_context.headers.put("Content-Type", content_type);
+
+            return null;
         }
     };
 }
@@ -42,13 +59,17 @@ pub fn Server(comptime init_args: anytype) type {
             var sock = try network.Socket.create(.ipv4, .tcp);
             defer sock.close();
 
-            try sock.bindToPort(8080);
+            try sock.bindToPort(10061);
 
             try sock.listen();
 
+            //TODO: add threading
+            //TODO: add persistent connections *after* implementing threading
             while (true) {
                 var client = try sock.accept();
                 defer client.close();
+
+                // try client.setTimeouts(std.time.ms_per_s * 10, std.time.ms_per_s * 10);
 
                 var buffered_reader = std.io.bufferedReader(client.reader());
                 var buffered_writer = std.io.bufferedWriter(client.writer());
@@ -70,7 +91,9 @@ pub fn Server(comptime init_args: anytype) type {
 
                 var path_buf: [1024]u8 = undefined;
 
-                var method = std.meta.stringToEnum(std.http.Method, try reader.readUntilDelimiter(&buf, ' ')).?;
+                const raw_method = try reader.readUntilDelimiter(&buf, ' ');
+                std.debug.print("shit {s}\n", .{raw_method});
+                var method = std.meta.stringToEnum(std.http.Method, raw_method).?;
                 var path = try reader.readUntilDelimiter(&path_buf, ' ');
                 var http_version = std.meta.stringToEnum(std.http.Version, try reader.readUntilDelimiter(&buf, '\r')).?;
                 _ = try reader.readByte(); //read out the garbage \n :)
@@ -99,6 +122,7 @@ pub fn Server(comptime init_args: anytype) type {
                     .method = method,
                     .version = http_version,
                     .path = path[1..],
+                    .socket = client,
                 };
 
                 try self.handleRequest(
@@ -117,6 +141,8 @@ pub fn Server(comptime init_args: anytype) type {
         }
 
         pub fn processRequest(self: *Self, path: []const u8, reader: Reader, writer: Writer, method: std.http.Method, request_context: *RequestContext) !void {
+            std.debug.print("got request for endpoint {s}\n", .{request_context.path});
+
             var response_context = ResponseContext{ .headers = std.StringHashMap([]const u8).init(request_context.allocator) };
 
             const path_hash = std.hash_map.hashString(path);
@@ -126,14 +152,22 @@ pub fn Server(comptime init_args: anytype) type {
 
             inline for (endpointGroupsTypeInfo.Struct.fields) |field| {
                 const endpoing_group_value = @field(init_args.endpoint_groups, field.name);
-                const endpoint_prefix: []const u8 = endpoing_group_value.prefix;
+
+                const endpoint_prefix: ?[]const u8 = if (@hasDecl(@TypeOf(init_args), "prefix"))
+                    endpoing_group_value.prefix
+                else
+                    null;
 
                 const endpointsTypeInfo = @typeInfo(@TypeOf(@field(endpoing_group_value, "endpoints")));
 
                 inline for (endpointsTypeInfo.Struct.fields) |endpoint_field| {
                     const endpoint_value = @field(@field(endpoing_group_value, "endpoints"), endpoint_field.name);
 
-                    const endpoint_path: []const u8 = endpoint_prefix ++ "/" ++ @field(endpoint_value, "path");
+                    const endpoint_path: []const u8 = if (endpoint_prefix) |prefix|
+                        prefix ++ "/" ++ @field(endpoint_value, "path")
+                    else
+                        @field(endpoint_value, "path");
+
                     const endpoint_method: std.http.Method = @field(endpoint_value, "method");
 
                     if (endpoint_method == method and path_hash == comptime std.hash_map.hashString(endpoint_path)) {
@@ -147,13 +181,13 @@ pub fn Server(comptime init_args: anytype) type {
                                 @field(args, args_field.name) = request_context.*;
                                 continue;
                             } else if (args_field.type == *RequestContext) {
-                                @field(args, args_field.name) = response_context;
+                                @field(args, args_field.name) = &request_context;
                                 continue;
                             } else if (args_field.type == ResponseContext) {
                                 @field(args, args_field.name) = response_context.*;
                                 continue;
                             } else if (args_field.type == *ResponseContext) {
-                                @field(args, args_field.name) = response_context;
+                                @field(args, args_field.name) = &response_context;
                                 continue;
                             } else if (args_field.type == Reader) {
                                 @field(args, args_field.name) = reader;
@@ -176,11 +210,13 @@ pub fn Server(comptime init_args: anytype) type {
 
                         const middlewaresTypeInfo = @typeInfo(@TypeOf(init_args.middlewares)).Struct;
 
+                        var middlewareCancellationStatus: ?std.http.Status = null;
                         inline for (middlewaresTypeInfo.fields) |middleware_field| {
-                            try @field(init_args.middlewares, middleware_field.name).handle(request_context, &response_context);
+                            if (middlewareCancellationStatus == null)
+                                middlewareCancellationStatus = try @field(init_args.middlewares, middleware_field.name).handle(request_context, &response_context);
                         }
 
-                        var ret = @call(.auto, endpoint_value.fun, args) catch |err| {
+                        var ret = if (middlewareCancellationStatus) |cancellation| cancellation else @call(.auto, endpoint_value.fun, args) catch |err| {
                             try send_response(writer, request_context.*, response_context, .internal_server_error, err);
 
                             return;
@@ -199,6 +235,8 @@ pub fn Server(comptime init_args: anytype) type {
 }
 
 fn send_response(writer: Writer, request_context: RequestContext, response_context: ResponseContext, status_code: std.http.Status, err: ?anyerror) !void {
+    std.debug.print("sending response {s}\n", .{@tagName(status_code)});
+
     //Write response version and response code
     try std.fmt.format(writer, "{s} {d} {s}\r\n", .{ @tagName(request_context.version), @intFromEnum(status_code), @tagName(status_code) });
 

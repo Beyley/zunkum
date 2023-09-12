@@ -1,47 +1,76 @@
 const std = @import("std");
 const zunkum = @import("zunkum");
+const network = @import("network");
 
-// fn upload(context: RequestContext, database: DatabaseContext) !void {
-fn upload(request_context: zunkum.Server.RequestContext) !std.http.Status {
-    var iter = request_context.headers.iterator();
-    _ = iter;
+const Endpoints = @import("zchan/endpoints.zig");
 
-    return error.Shit;
-    // return .bad_request;
-}
+const Post = @import("zchan/post.zig");
 
-// fn rate(context: RequestContext, database: DatabaseContext) !void {
-fn rate() !std.http.Status {
-    // return error.SHIT;
-    return .ok;
-}
+pub var posts: std.ArrayList(Post) = undefined;
 
 pub fn main() !void {
+    posts = std.ArrayList(Post).init(std.heap.c_allocator);
+    defer posts.deinit();
+
     var server = try zunkum.create(std.heap.c_allocator, .{
         .middlewares = .{
-            zunkum.Server.ServerMiddleware("zunkum test"),
+            zunkum.Server.ServerMiddleware("zchan (zunkum)"),
+            zunkum.Server.ContentTypeHtmlMiddleware,
+            // zig fmt: off
+            struct {
+                var map = std.AutoHashMap(u32, i64).init(std.heap.c_allocator);
+                
+                pub fn handle(
+                    request_context: *zunkum.Server.RequestContext,
+                    response_context: *zunkum.Server.ResponseContext,
+                ) !?std.http.Status {
+                    _ = response_context;
+
+                    //Only apply this to the `post` endpoint
+                    if (!std.mem.eql(u8, request_context.path, "post")) return null;
+                
+                    //Get the address
+                    const address = (try request_context.socket.getRemoteEndPoint()).address.ipv4.value;
+                
+                    //If we know of this address
+                    if (map.get(@bitCast(address))) |lastTime| {
+                        //If they posted less than 5 seconds ago
+                        if (std.time.timestamp() - lastTime < 5) {
+                            //Update the timestamp
+                            try map.put(@bitCast(address), std.time.timestamp());
+                            //Block the request
+                            return .too_many_requests;
+                        }
+                    }
+
+                    //Update the timestamp
+                    try map.put(@bitCast(address), std.time.timestamp());
+                
+                    return null;
+                }
+            },
+            //zig fmt: on
         },
         .services = .{
             struct {
-                pub const Type = std.http.Version;
+                pub const Type = *std.ArrayList(Post);
                 pub fn provide(request_context: *zunkum.Server.RequestContext) !Type {
                     _ = request_context;
-                    return std.http.Version.@"HTTP/1.0";
+                    return &posts;
                 }
             },
         },
         .endpoint_groups = .{
             .{
-                .prefix = "lbp",
                 .endpoints = .{
                     .{
-                        .path = "upload/hash/",
-                        .fun = upload,
+                        .path = "",
+                        .fun = Endpoints.home,
                         .method = .GET,
                     },
                     .{
-                        .path = "rate/",
-                        .fun = rate,
+                        .path = "post",
+                        .fun = Endpoints.post,
                         .method = .POST,
                     },
                 },

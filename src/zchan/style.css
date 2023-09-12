@@ -1,0 +1,28 @@
+	body {
+		margin:40px auto;
+		max-width:650px;
+		line-height:1.6;
+		font-size:18px;
+		color:#444;
+		padding:0 10px;
+		background-color: #EEE;
+		font-family: Arial;
+	}
+
+	h1,h2,h3 {
+		line-height:1.2;
+	}
+
+	img.center {
+		display: block;
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	div.center {
+		text-align: center;
+	}
+
+	h1.name {
+		font-family: Helvetica;
+	}
