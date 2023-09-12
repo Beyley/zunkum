@@ -27,8 +27,8 @@ pub fn home(
     while (i < @min(50, posts.items.len)) : (i += 1) {
         const post_item = posts.items[posts.items.len - i - 1];
 
-        try response_body.appendSlice("<p>");
         try std.fmt.format(response_body.writer(), "<h2>{s}</h2>", .{post_item.name.slice()});
+        try response_body.appendSlice("<p style=\"word-wrap: break-word\">");
         for (post_item.content.slice()) |c| {
             switch (c) {
                 '&' => try response_body.appendSlice("&amp;"),
@@ -57,7 +57,9 @@ pub fn post(
     }
 
     //TODO: figure out how to not alloc here
-    var body = try request_context.allocator.alloc(u8, try std.fmt.parseInt(usize, request_context.headers.get("Content-Length").?, 10));
+    var body = try std.heap.c_allocator.alloc(u8, try std.fmt.parseInt(usize, request_context.headers.get("Content-Length").?, 10));
+    defer std.heap.c_allocator.free(body);
+
     const read = try reader.read(body);
 
     const NetworkPost = struct {
@@ -77,7 +79,7 @@ pub fn post(
 
     try posts.append(.{
         .name = try std.BoundedArray(u8, 128).fromSlice(post_from_network.name),
-        .content = try std.BoundedArray(u8, 4096).fromSlice(post_from_network.content),
+        .content = try std.BoundedArray(u8, 8192).fromSlice(post_from_network.content),
     });
 
     return .ok;
