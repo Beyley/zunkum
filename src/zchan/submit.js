@@ -13,5 +13,5 @@ function submit_post() {
         headers: {
             "Content-type": "application/json; charset=UTF-8"
         }
-    }).then(() => window.location.reload(false));
+    }).then(function() { window.location.reload(false); });
 }

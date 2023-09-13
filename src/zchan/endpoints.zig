@@ -13,12 +13,14 @@ pub fn home(
 
     try response_body.appendSlice(
         \\<!DOCTYPE html>
+        \\<head>
+    ++ "<script>" ++ @embedFile("submit.js") ++ "</script>" ++
+        \\</head>
         \\<div class="center"><h1>zchan</h1></div>
     );
 
     try response_body.appendSlice("<style>" ++ @embedFile("style.css") ++ "</style>");
 
-    try response_body.appendSlice("<script>" ++ @embedFile("submit.js") ++ "</script>");
     try response_body.appendSlice(@embedFile("form.html"));
 
     try response_body.appendSlice("<hr>");
