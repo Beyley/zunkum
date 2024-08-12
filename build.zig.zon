@@ -1,10 +1,16 @@
 .{
     .name = "zunkum",
     .version = "0.0.0",
+    .paths = .{
+        "src/",
+        "build.zig",
+        "build.zig.zon",
+        "LICENSE",
+    },
     .dependencies = .{
         .network = .{
-            .url = "https://github.com/MasterQ32/zig-network/archive/830821a8736ca1bf7662b9c5fec9bfe9f0066ad3.tar.gz",
-            .hash = "1220206c698a1890d742a8b98acb16db99275d16f2e7fe2046c3d8f2249ed267ca71",
+            .url = "git+https://github.com/MasterQ32/zig-network#bcf6cc8918d574f947b2647522d84a805c33f1c8",
+            .hash = "12203b3634f36570ffced059248bd429cd06dc89a98659c86569d890fdd99b5070bd",
         },
     },
 }

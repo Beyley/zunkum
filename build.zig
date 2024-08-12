@@ -6,17 +6,20 @@ pub fn build(b: *std.Build) void {
 
     const network = b.dependency("network", .{}).module("network");
 
-    const zunkum = b.addModule("zunkum", .{ .source_file = .{ .path = "src/zunkum.zig" }, .dependencies = &.{.{ .name = "network", .module = network }} });
+    const zunkum = b.addModule("zunkum", .{
+        .root_source_file = b.path("src/zunkum.zig"),
+    });
+    zunkum.addImport("network", network);
 
     const exe = b.addExecutable(.{
         .name = "zunkum",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
     exe.linkLibC();
-    exe.addModule("network", network);
-    exe.addModule("zunkum", zunkum);
+    exe.root_module.addImport("network", network);
+    exe.root_module.addImport("zunkum", zunkum);
 
     b.installArtifact(exe);
     const run_cmd = b.addRunArtifact(exe);
@@ -27,7 +30,7 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
     const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });

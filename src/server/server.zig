@@ -74,8 +74,8 @@ pub fn Server(comptime init_args: anytype) type {
                 var buffered_reader = std.io.bufferedReader(client.reader());
                 var buffered_writer = std.io.bufferedWriter(client.writer());
 
-                var reader = buffered_reader.reader();
-                var writer = buffered_writer.writer();
+                const reader = buffered_reader.reader();
+                const writer = buffered_writer.writer();
 
                 //reasonable upper bound...
                 //TODO: add option to figure this in `args`
@@ -93,9 +93,9 @@ pub fn Server(comptime init_args: anytype) type {
 
                 const raw_method = try reader.readUntilDelimiter(&buf, ' ');
                 std.debug.print("shit {s}\n", .{raw_method});
-                var method = std.meta.stringToEnum(std.http.Method, raw_method).?;
+                const method = std.meta.stringToEnum(std.http.Method, raw_method).?;
                 var path = try reader.readUntilDelimiter(&path_buf, ' ');
-                var http_version = std.meta.stringToEnum(std.http.Version, try reader.readUntilDelimiter(&buf, '\r')).?;
+                const http_version = std.meta.stringToEnum(std.http.Version, try reader.readUntilDelimiter(&buf, '\r')).?;
                 _ = try reader.readByte(); //read out the garbage \n :)
 
                 var headers = std.StringHashMap([]const u8).init(allocator);
@@ -216,7 +216,7 @@ pub fn Server(comptime init_args: anytype) type {
                                 middlewareCancellationStatus = try @field(init_args.middlewares, middleware_field.name).handle(request_context, &response_context);
                         }
 
-                        var ret = if (middlewareCancellationStatus) |cancellation| cancellation else @call(.auto, endpoint_value.fun, args) catch |err| {
+                        const ret = if (middlewareCancellationStatus) |cancellation| cancellation else @call(.auto, endpoint_value.fun, args) catch |err| {
                             try send_response(writer, request_context.*, response_context, .internal_server_error, err);
 
                             return;
